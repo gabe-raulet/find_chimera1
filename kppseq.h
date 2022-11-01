@@ -142,9 +142,10 @@ private:
     std::vector<std::string> seqs;
     std::vector<std::string> quals;
     std::unordered_map<std::string, int> idmap;
+    int maxlen;
 
 public:
-    seqstore(kseq& ks)
+    seqstore(kseq& ks) : maxlen(0)
     {
         int i = 0;
         while (ks.read() >= 0)
@@ -154,6 +155,7 @@ public:
             seqs.push_back(ks.getseq());
             if (ks.isfastq()) quals.push_back(ks.getqual());
             idmap.insert({ks.getname(), i++});
+            maxlen = ks.getseq().size() > maxlen? ks.getseq().size() : maxlen;
         }
     }
 
@@ -162,6 +164,8 @@ public:
         auto q = idmap.find(name);
         return q != idmap.end()? static_cast<int>(q->second) : -1;
     }
+
+    int get_maxlen() const { return maxlen; }
 
     const std::string& query_name(int id) { return names[id]; }
     const std::string& query_comment(int id) { return comments[id]; }
