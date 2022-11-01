@@ -89,7 +89,7 @@ private:
     kstream<16384> ks;
 
 public:
-    kseq(gzFile fd) : ks(fd), is_fastq(false) {}
+    kseq(gzFile fd) : ks(fd), is_fastq(false), last_char(0) {}
 
     const std::string& getname() const { return name; }
     const std::string& getcomment() const { return comment; }
@@ -145,6 +145,7 @@ private:
     int maxlen;
 
 public:
+
     seqstore(kseq& ks) : maxlen(0)
     {
         int i = 0;
@@ -166,6 +167,7 @@ public:
     }
 
     int get_maxlen() const { return maxlen; }
+    int get_numseqs() const { return seqs.size(); }
 
     const std::string& query_name(int id) { return names[id]; }
     const std::string& query_comment(int id) { return comments[id]; }
