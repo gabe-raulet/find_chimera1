@@ -177,8 +177,6 @@ int main(int argc, char *argv[])
         assert(std::get<0>(coverage[qi]) == static_cast<uint32_t>(ql));
         assert(std::get<0>(coverage[ti]) == static_cast<uint32_t>(tl));
 
-        // char strand = rc? '-' : '+';
-        // std::cout << qn << "\t" << ql << "\t" << q_ext_l << "\t" << q_ext_r << "\t" << strand << "\t" << tn << "\t" << tl << "\t" << t_ext_l << "\t" << t_ext_r << "\t" << score << std::endl;
     }
 
     delete [] static_cast<int*>(Amem);
@@ -188,6 +186,7 @@ int main(int argc, char *argv[])
     for (int i = 0; i < store.get_numseqs(); ++i)
     {
         std::string name = store.query_name(i);
+        std::string seq = store.query_seq(i);
         uint32_t length = std::get<0>(coverage[i]);
         std::vector<interval_t>& intervals = std::get<1>(coverage[i]);
 
@@ -201,57 +200,83 @@ int main(int argc, char *argv[])
         }
 
         bool in_gap = true;
-
-        std::vector<interval_t> middle_gaps, extremity_gaps;
         uint32_t beg = 0, end = 0;
+
+        int splits = 0;
 
         for (int j = 0; j < length; ++j)
         {
-            if (covered_bases[j] <= coverage_min && !in_gap)
-            {
-                end = 0, beg = j;
-                in_gap = true;
-            }
-
-            if (covered_bases[j] > coverage_min && in_gap)
+            if (covered_bases[j] <= coverage_min && !in_gap) /* just entered a gap */
             {
                 end = j;
-                in_gap = false;
-                add_gaps(beg, end, length, middle_gaps, extremity_gaps);
-            }
-        }
+                in_gap = true;
 
-        if (in_gap)
-        {
-            end = length;
-            add_gaps(beg, end, length, middle_gaps, extremity_gaps);
-        }
-
-        if (middle_gaps.size() > 0)
-        {
-            std::cout << "Chimeric:" << name << "," << length << ";";
-            for (int idx = 0; idx < middle_gaps.size(); ++idx)
-            {
-                int g1 = std::get<0>(middle_gaps[idx]);
-                int g2 = std::get<1>(middle_gaps[idx]);
-                std::cout << absdiff(g1, g2) << "," << g1 << "," << g2 << ";";
-            }
-            std::cout << std::endl;
-        }
-        else
-        {
-            for (int idx = 0; idx < extremity_gaps.size(); ++idx)
-            {
-                int g1 = std::get<0>(extremity_gaps[idx]);
-                int g2 = std::get<1>(extremity_gaps[idx]);
-                if (absdiff(g1, g2) > 0.8*length)
+                if (beg < end)
                 {
-                    std::cout << "Not_covered:" << name << "," << length << ";";
-                    std::cout << absdiff(g1, g2) << "," << g1 << "," << g2 << ";" << std::endl;
-                    break;
+                    std::cout << ">" << name << ";split" << ++splits << " " << beg << "," << end << "\n";
+                    std::cout << seq.substr(beg, end - beg);
                 }
             }
+
+            if (covered_bases[j] > coverage_min && in_gap) /* just exited a gap */
+            {
+                beg = j;
+                in_gap = false;
+            }
         }
+
+        // bool in_gap = true;
+
+        // std::vector<interval_t> middle_gaps, extremity_gaps;
+        // uint32_t beg = 0, end = 0;
+
+        // for (int j = 0; j < length; ++j)
+        // {
+            // if (covered_bases[j] <= coverage_min && !in_gap)
+            // {
+                // end = 0, beg = j;
+                // in_gap = true;
+            // }
+
+            // if (covered_bases[j] > coverage_min && in_gap)
+            // {
+                // end = j;
+                // in_gap = false;
+                // add_gaps(beg, end, length, middle_gaps, extremity_gaps);
+            // }
+        // }
+
+        // if (in_gap)
+        // {
+            // end = length;
+            // add_gaps(beg, end, length, middle_gaps, extremity_gaps);
+        // }
+
+        // if (middle_gaps.size() > 0)
+        // {
+            // std::cout << "Chimeric:" << name << "," << length << ";";
+            // for (int idx = 0; idx < middle_gaps.size(); ++idx)
+            // {
+                // int g1 = std::get<0>(middle_gaps[idx]);
+                // int g2 = std::get<1>(middle_gaps[idx]);
+                // std::cout << absdiff(g1, g2) << "," << g1 << "," << g2 << ";";
+            // }
+            // std::cout << std::endl;
+        // }
+        // else
+        // {
+            // for (int idx = 0; idx < extremity_gaps.size(); ++idx)
+            // {
+                // int g1 = std::get<0>(extremity_gaps[idx]);
+                // int g2 = std::get<1>(extremity_gaps[idx]);
+                // if (absdiff(g1, g2) > 0.8*length)
+                // {
+                    // std::cout << "Not_covered:" << name << "," << length << ";";
+                    // std::cout << absdiff(g1, g2) << "," << g1 << "," << g2 << ";" << std::endl;
+                    // break;
+                // }
+            // }
+        // }
     }
 
     return 0;
