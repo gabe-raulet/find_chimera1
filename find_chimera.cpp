@@ -12,6 +12,18 @@ typedef std::tuple<int, int, int, int> seed_t;
 typedef std::tuple<int, int> interval_t;
 typedef std::tuple<uint32_t, std::vector<interval_t>> cov_t;
 
+template <typename T>
+T absdiff(T a, T b) { return a < b? b - a : a - b; }
+
+void add_gaps(uint32_t beg, uint32_t end, uint32_t length, std::vector<interval_t>& middle, std::vector<interval_t>& extremity)
+{
+    if (beg != end)
+    {
+        if (!beg || end == length) extremity.push_back({beg, end});
+        else middle.push_back({beg, end});
+    }
+}
+
 char comp(char c)
 {
     switch (c)
@@ -34,7 +46,7 @@ std::string revcomp(const std::string& s)
 
 int extend_seed
 (
-    void *Amem,
+    int *Amem,
     const char *qs, /* query sequence */
     const char *ts, /* target sequence */
     int ql, /* query sequence length */
@@ -54,7 +66,7 @@ int extend_seed
 
 int extend_seed_lr
 (
-    void *Amem, /* memory for anti-diagonals */
+    int *Amem, /* memory for anti-diagonals */
     const char *qs, /* query sequence */
     const char *ts, /* target sequence */
     int ql, /* query sequence length */
@@ -124,9 +136,7 @@ int main(int argc, char *argv[])
         seeds.push_back(seed);
     }
 
-    void *Amem = static_cast<void*>(new int[3*(store.get_maxlen()+1)]);
-    uint16_t *covered_bases = new uint16_t[store.get_maxlen()];
-
+    int *Amem = new int[3*store.get_maxlen()+1];
 
     for (auto itr = seeds.begin(); itr != seeds.end(); ++itr)
     {
@@ -164,8 +174,6 @@ int main(int argc, char *argv[])
         std::get<1>(coverage[qi]).push_back({q_ext_l, q_ext_r});
         std::get<1>(coverage[ti]).push_back({t_ext_l, t_ext_r});
 
-        // std::cout << std::get<0>(coverage[qi]) << "\t" << std::get<0>(coverage[ti]) << std::endl;
-        // std::cout << ql << "\t" << tl << std::endl;
         assert(std::get<0>(coverage[qi]) == static_cast<uint32_t>(ql));
         assert(std::get<0>(coverage[ti]) == static_cast<uint32_t>(tl));
 
@@ -173,12 +181,85 @@ int main(int argc, char *argv[])
         // std::cout << qn << "\t" << ql << "\t" << q_ext_l << "\t" << q_ext_r << "\t" << strand << "\t" << tn << "\t" << tl << "\t" << t_ext_l << "\t" << t_ext_r << "\t" << score << std::endl;
     }
 
+    delete [] static_cast<int*>(Amem);
+
+    uint16_t *covered_bases = new uint16_t[store.get_maxlen()];
+
+    for (int i = 0; i < store.get_numseqs(); ++i)
+    {
+        std::string name = store.query_name(i);
+        uint32_t length = std::get<0>(coverage[i]);
+        std::vector<interval_t>& intervals = std::get<1>(coverage[i]);
+
+        memset(covered_bases, 0, length * sizeof(uint16_t));
+
+        for (int idx = 0; idx < intervals.size(); ++idx)
+        {
+            uint32_t beg = std::get<0>(intervals[idx]);
+            uint32_t end = std::get<1>(intervals[idx]);
+            for (int j = beg; j < end; ++j) covered_bases[j]++;
+        }
+
+        bool in_gap = true;
+
+        std::vector<interval_t> middle_gaps, extremity_gaps;
+        uint32_t beg = 0, end = 0;
+
+        for (int j = 0; j < length; ++j)
+        {
+            if (covered_bases[j] <= coverage_min && !in_gap)
+            {
+                end = 0, beg = j;
+                in_gap = true;
+            }
+
+            if (covered_bases[j] > coverage_min && in_gap)
+            {
+                end = j;
+                in_gap = false;
+                add_gaps(beg, end, length, middle_gaps, extremity_gaps);
+            }
+        }
+
+        if (in_gap)
+        {
+            end = length;
+            add_gaps(beg, end, length, middle_gaps, extremity_gaps);
+        }
+
+        if (middle_gaps.size() > 0)
+        {
+            std::cout << "Chimeric:" << name << "," << length << ";";
+            for (int idx = 0; idx < middle_gaps.size(); ++idx)
+            {
+                int g1 = std::get<0>(middle_gaps[idx]);
+                int g2 = std::get<1>(middle_gaps[idx]);
+                std::cout << absdiff(g1, g2) << "," << g1 << "," << g2 << ";";
+            }
+            std::cout << std::endl;
+        }
+        else
+        {
+            for (int idx = 0; idx < extremity_gaps.size(); ++idx)
+            {
+                int g1 = std::get<0>(extremity_gaps[idx]);
+                int g2 = std::get<1>(extremity_gaps[idx]);
+                if (absdiff(g1, g2) > 0.8*length)
+                {
+                    std::cout << "Not_covered:" << name << "," << length << ";";
+                    std::cout << absdiff(g1, g2) << "," << g1 << "," << g2 << ";" << std::endl;
+                    break;
+                }
+            }
+        }
+    }
+
     return 0;
 }
 
 int extend_seed
 (
-    void *Amem,
+    int *Amem,
     const char *qs, /* query sequence */
     const char *ts, /* target sequence */
     int ql, /* query sequence length */
@@ -227,7 +308,7 @@ int extend_seed
 
 int extend_seed_lr
 (
-    void *Amem, /* memory for anti-diagonals */
+    int *Amem, /* memory for anti-diagonals */
     const char *qs, /* query sequence */
     const char *ts, /* target sequence */
     int ql, /* query sequence length */
@@ -247,7 +328,7 @@ int extend_seed_lr
 
     int m = extleft? qb + 1 : ql - qb; /* number of rows */
     int n = extleft? tb + 1 : tl - tb; /* number of columns */
-    int *A = static_cast<int*>(Amem); /* scoring anti-diagonals */
+    int *A = Amem; /* scoring anti-diagonals */
     int undef = std::min((std::numeric_limits<int>::min() / (m+n)) - gap, std::numeric_limits<int>::min() - gap); /* un-explored value (-inf) */
     int best = 0; /* best score seen so far */
     int cur_best = undef; /*best score seen on current anti-diagonal */
